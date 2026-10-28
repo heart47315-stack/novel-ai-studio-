@@ -1,6 +1,5 @@
 
 import { useState, type FormEvent } from 'react';
-import { FirebaseError } from 'firebase/app';
 import { signIn, signUp } from './lib/authService';
 import { loginGoogle } from './lib/authActions';
 
@@ -24,18 +23,7 @@ export default function LoginPage({
     try {
       await loginGoogle();
     } catch (error) {
-      if (error instanceof FirebaseError) {
-        if (error.code === 'auth/popup-closed-by-user') return;
-        if (error.code === 'auth/unauthorized-domain') {
-          setGoogleError('โดเมนนี้ยังไม่ได้รับอนุญาตใน Firebase');
-        } else if (error.code === 'auth/popup-blocked') {
-          setGoogleError('เบราว์เซอร์บล็อกหน้าต่างล็อกอิน กรุณาอนุญาต popup');
-        } else {
-          setGoogleError('ล็อกอินด้วย Google ไม่สำเร็จ ลองใหม่อีกครั้ง');
-        }
-      } else {
-        setGoogleError('ล็อกอินด้วย Google ไม่สำเร็จ ลองใหม่อีกครั้ง');
-      }
+      setGoogleError(error instanceof Error ? error.message : 'ล็อกอินด้วย Google ไม่สำเร็จ ลองใหม่อีกครั้ง');
     } finally {
       setLoading(false);
     }
@@ -101,8 +89,7 @@ export default function LoginPage({
 
         {supabaseConfigurationError && (
           <p role="status" style={{ color: '#9a5b00', lineHeight: 1.6 }}>
-            ระบบล็อกอินอีเมลยังไม่ได้ตั้งค่า: {supabaseConfigurationError}
-            {' '}แต่ยังสามารถเข้าสู่ระบบด้วย Google ได้
+            ระบบล็อกอินยังไม่ได้ตั้งค่า: {supabaseConfigurationError}
           </p>
         )}
 

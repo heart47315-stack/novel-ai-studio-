@@ -1,6 +1,6 @@
 # Novel AI Studio
 
-เว็บต้นแบบสำหรับจัดการโปรเจกต์นิยายด้วย React + TypeScript + Vite + Tailwind CSS
+เว็บจัดการโปรเจกต์นิยายด้วย React + TypeScript + Vite + Supabase Auth
 ธีมชมพู-ม่วงพาสเทล
 
 ## Requirements
@@ -21,20 +21,47 @@ Use only a Publishable/Anon key in this frontend. Never use a Supabase
 Secret/service_role key or an AI provider secret in a `VITE_*` variable.
 Restart the Vite server after changing environment variables.
 
+Google sign-in is handled by Supabase Auth. Configure the Google provider and
+redirect URLs in the confirmed Supabase project before using that option.
+
+## AI Edge Function
+
+The `novel-ai` Edge Function checks the Supabase access token, validates and
+limits requests, then calls the OpenAI Responses API using `gpt-4.1-mini`.
+It supports separate outline, character, and one-chapter-at-a-time generation.
+The OpenAI key belongs only in Supabase Function Secrets.
+
+After confirming the currently linked Supabase project and authenticating the
+Supabase CLI in a trusted terminal, create a local `.env.supabase` file (ignored
+by Git) with `OPENAI_API_KEY=<your key>`, then run:
+
+```powershell
+supabase secrets set --env-file .env.supabase
+Remove-Item .env.supabase
+supabase functions deploy novel-ai
+```
+
+Do not run these commands until you have verified that the CLI is linked to the
+intended project. Do not put an OpenAI key in `.env`, `.env.local`, frontend
+code, or chat. `supabase/config.toml` keeps JWT verification enabled.
+
 ## Production build
 ```bash
 npm run build
 npm run preview
 ```
 
-## Current prototype scope
-- Dashboard แสดงนิยายตัวอย่างและความคืบหน้า
-- สร้างโปรเจกต์นิยายจากชื่อ แนวเรื่อง ไอเดียหลัก และจำนวนบท
-- ค้นหานิยายในรายการ
-- แก้ไขชื่อ/รายละเอียดและลบโปรเจกต์ตัวอย่าง
-- เก็บข้อมูลฝั่งเบราว์เซอร์ด้วย localStorage
+## Current status and limitations
 
-## Not connected yet
-Supabase authentication/database, AI provider, background generation worker, real 30-chapter generation,
-continuity validation and DOCX/PDF export are not implemented in this starter. The "เริ่มวางพล็อตด้วย AI"
-button is a UI placeholder until a secure server-side generation API is added.
+- The Dashboard and library load novels and saved chapter counts from Supabase;
+  creating, editing, and deleting novels use the signed-in user's session and
+  the verified owner RLS policies.
+- The AI controls call the deployed `novel-ai` Edge Function for outlines,
+  characters, and one chapter per request. Generated outlines, characters,
+  chapter text, and continuity notes are saved to their corresponding Supabase
+  tables and can be reopened in the reader.
+- The reader provides a chapter list, chapter navigation, and a distraction-free
+  reading layout. No sample novels are automatically shown as real projects.
+- `generation_jobs` currently has a SELECT-only RLS policy, so the browser does
+  not write generation job records. Background generation is not implemented.
+- DOCX/PDF export is not implemented.

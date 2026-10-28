@@ -1,5 +1,6 @@
 
 import { createClient } from '@supabase/supabase-js';
+import type { Database } from './database.types';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim();
 const supabaseKey = (
@@ -57,4 +58,4 @@ export const supabaseConfigurationError = getConfigurationError();
 
 export const supabase = supabaseConfigurationError || !supabaseUrl || !supabaseKey
   ? null
-  : createClient(supabaseUrl, supabaseKey);
+  : createClient<Database>(supabaseUrl, supabaseKey);
