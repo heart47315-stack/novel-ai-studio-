@@ -1,6 +1,12 @@
 {
   "imports": {
+<<<<<<< HEAD
     "@supabase/supabase-js": "npm:@supabase/supabase-js@^2",
     "jose": "npm:jose@^5"
+=======
+    "@supabase/functions-js": "jsr:@supabase/functions-js@^2",
+    "@supabase/server": "npm:@supabase/server@^1",
+    "@supabase/supabase-js": "npm:@supabase/supabase-js@^2"
+>>>>>>> bdee6feef93e04f1ca58e5d2b422188b6f75ad01
   }
 }

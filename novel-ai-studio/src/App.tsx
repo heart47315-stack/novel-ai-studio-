@@ -1,8 +1,19 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import LoginPage from './LoginPage';
-import { supabase, supabaseConfigurationError } from './lib/supabase';
+import { supabaseConfigurationError } from './lib/supabase';
 import { useAuth } from './lib/AuthContext';
-import type { Session } from '@supabase/supabase-js';
+import { generateNovelContent, type GeneratedChapter, type NovelCharacter, type NovelOutline } from './lib/novelAi';
+import {
+  createNovel as createNovelRecord,
+  deleteNovel as deleteNovelRecord,
+  listNovelChapters,
+  listNovels,
+  loadNovelWorkspace,
+  saveNovelChapter,
+  saveNovelCharacters,
+  saveNovelOutline,
+  updateNovel as updateNovelRecord,
+} from './lib/novelRepository';
 
 
 import {
@@ -12,13 +23,17 @@ import {
   CheckCircle2, SlidersHorizontal, Feather, Stars, PanelLeftClose,
   LoaderCircle, BookMarked, ChevronLeft, ChevronRight, CircleAlert,
 } from 'lucide-react'
+<<<<<<< HEAD
 import { starterNovels } from './data'
 import type { Genre, NewNovelInput, Novel, NovelChapter } from './types'
 import { generateNovelChapter } from './lib/novelAi'
+=======
+import type { Genre, NewNovelInput, Novel } from './types'
+>>>>>>> bdee6feef93e04f1ca58e5d2b422188b6f75ad01
 
-const STORAGE_KEY = 'novel-ai-studio:novels:v1'
 const genres: Genre[] = ['โรแมนซ์', 'แฟนตาซี', 'สืบสวน', 'ดราม่า', 'ไซไฟ', 'วาย / ยูริ', 'อื่น ๆ']
 
+<<<<<<< HEAD
 function loadNovels(): Novel[] {
   try {
     const stored = localStorage.getItem(STORAGE_KEY)
@@ -36,12 +51,26 @@ function makeId() {
 function DashboardApp() {
   const { user: firebaseUser } = useAuth()
   const [novels, setNovels] = useState<Novel[]>(loadNovels)
+=======
+function DashboardApp({ userId, displayName }: { userId: string; displayName: string }) {
+  const [novels, setNovels] = useState<Novel[]>([])
+  const [loadingNovels, setLoadingNovels] = useState(true)
+  const [savingNovel, setSavingNovel] = useState(false)
+  const [novelLoadError, setNovelLoadError] = useState('')
+>>>>>>> bdee6feef93e04f1ca58e5d2b422188b6f75ad01
   const [search, setSearch] = useState('')
   const [activeNav, setActiveNav] = useState('ภาพรวม')
   const [showCreate, setShowCreate] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [selectedNovel, setSelectedNovel] = useState<Novel | null>(null)
+<<<<<<< HEAD
   const [generatingNovelId, setGeneratingNovelId] = useState<string | null>(null)
+=======
+  const [readingNovel, setReadingNovel] = useState<Novel | null>(null)
+  const [readerChapters, setReaderChapters] = useState<GeneratedChapter[]>([])
+  const [readerLoading, setReaderLoading] = useState(false)
+  const [readerError, setReaderError] = useState('')
+>>>>>>> bdee6feef93e04f1ca58e5d2b422188b6f75ad01
   const [notice, setNotice] = useState('')
   const [noticeIsError, setNoticeIsError] = useState(false)
   const [form, setForm] = useState<NewNovelInput>({
@@ -54,12 +83,32 @@ function DashboardApp() {
   }
 
   useEffect(() => {
+<<<<<<< HEAD
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(novels))
     } catch {
       notify('บันทึกในเบราว์เซอร์ไม่สำเร็จ กรุณาตรวจสอบพื้นที่จัดเก็บ', true)
     }
   }, [novels])
+=======
+    let active = true
+    setLoadingNovels(true)
+    void listNovels(userId).then((loadedNovels) => {
+      if (active) {
+        setNovels(loadedNovels)
+        setNovelLoadError('')
+      }
+    }).catch((error: unknown) => {
+      if (active) {
+        setNovelLoadError(error instanceof Error ? error.message : 'โหลดคลังนิยายไม่สำเร็จ')
+        setNotice(error instanceof Error ? `โหลดคลังนิยายไม่สำเร็จ: ${error.message}` : 'โหลดคลังนิยายไม่สำเร็จ')
+      }
+    }).finally(() => {
+      if (active) setLoadingNovels(false)
+    })
+    return () => { active = false }
+  }, [userId])
+>>>>>>> bdee6feef93e04f1ca58e5d2b422188b6f75ad01
 
   useEffect(() => {
     const openLibrary = () => setActiveNav('คลังนิยาย')
@@ -82,6 +131,7 @@ function DashboardApp() {
   async function createNovel(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const title = form.title.trim()
+<<<<<<< HEAD
     if (!title) return
     const nextNovel: Novel = {
       id: makeId(),
@@ -159,20 +209,72 @@ function DashboardApp() {
     } finally {
       setGeneratingNovelId(null)
     }
+=======
+    if (!title || savingNovel) return
+    setSavingNovel(true)
+    try {
+      const novel = await createNovelRecord({ ...form, title }, userId)
+      setNovels((current) => [novel, ...current])
+      setForm({ title: '', genre: 'โรแมนซ์', premise: '', chaptersTarget: 30 })
+      setShowCreate(false)
+      setActiveNav('คลังนิยาย')
+      setNotice('สร้างนิยายและบันทึกลง Supabase แล้ว')
+    } catch (error) {
+      setNotice(error instanceof Error ? `บันทึกนิยายไม่สำเร็จ: ${error.message}` : 'บันทึกนิยายไม่สำเร็จ')
+    } finally {
+      setSavingNovel(false)
+    }
+>>>>>>> bdee6feef93e04f1ca58e5d2b422188b6f75ad01
   }
 
-  function deleteNovel(id: string) {
+  async function deleteNovel(id: string) {
     const target = novels.find((novel) => novel.id === id)
     if (!target || !window.confirm(`ต้องการลบโปรเจกต์ “${target.title}” หรือไม่?`)) return
+<<<<<<< HEAD
     setNovels((current) => current.filter((novel) => novel.id !== id))
     setSelectedNovel(null)
     notify('ลบโปรเจกต์แล้ว')
+=======
+    try {
+      await deleteNovelRecord(id, userId)
+      setNovels((current) => current.filter((novel) => novel.id !== id))
+      setSelectedNovel(null)
+      setNotice('ลบนิยายแล้ว')
+    } catch (error) {
+      setNotice(error instanceof Error ? `ลบนิยายไม่สำเร็จ: ${error.message}` : 'ลบนิยายไม่สำเร็จ')
+    }
+>>>>>>> bdee6feef93e04f1ca58e5d2b422188b6f75ad01
   }
 
-  function updateNovel(id: string, patch: Partial<Novel>) {
+  async function updateNovel(id: string, patch: Partial<Novel>) {
+    await updateNovelRecord(id, patch, userId)
     setNovels((current) => current.map((novel) => novel.id === id ? { ...novel, ...patch, updatedAt: 'แก้ไขล่าสุด' } : novel))
     setSelectedNovel((current) => current?.id === id ? { ...current, ...patch, updatedAt: 'แก้ไขล่าสุด' } : current)
+<<<<<<< HEAD
     notify('บันทึกการแก้ไขแล้ว')
+=======
+    setNotice('บันทึกการแก้ไขลง Supabase แล้ว')
+  }
+
+  async function openReader(novel: Novel) {
+    setReaderError('')
+    setReaderChapters([])
+    setReaderLoading(true)
+    setReadingNovel(novel)
+    try {
+      setReaderChapters(await listNovelChapters(novel.id))
+    } catch (error) {
+      setReaderError(error instanceof Error ? error.message : 'โหลดบทนิยายไม่สำเร็จ')
+    } finally {
+      setReaderLoading(false)
+    }
+  }
+
+  function onChapterSaved(novelId: string, chaptersWritten: number) {
+    setNovels((current) => current.map((novel) => novel.id === novelId
+      ? { ...novel, chaptersWritten, status: 'กำลังเขียน', updatedAt: 'เพิ่งเขียน' }
+      : novel))
+>>>>>>> bdee6feef93e04f1ca58e5d2b422188b6f75ad01
   }
 
   function navTo(label: string) {
@@ -219,8 +321,8 @@ function DashboardApp() {
             <div className="upgrade-orb orb-one" /><div className="upgrade-orb orb-two" />
           </div>
           <div className="profile-row">
-            <div className="profile-avatar">J</div>
-            <div className="profile-copy"><strong>นักเขียนของฉัน</strong><span>บัญชีส่วนตัว · Demo</span></div>
+            <div className="profile-avatar">{displayName.slice(0, 1).toUpperCase()}</div>
+            <div className="profile-copy"><strong>{displayName}</strong><span>บัญชี Supabase</span></div>
             <MoreHorizontal size={19} className="muted-icon" />
           </div>
         </div>
@@ -230,14 +332,21 @@ function DashboardApp() {
         <header className="topbar">
           <div className="breadcrumb"><span>Workspace</span><span className="crumb-slash">/</span><strong>{activeNav}</strong></div>
           <div className="top-actions">
+<<<<<<< HEAD
             <div className="local-badge"><span /> บันทึกในเครื่อง</div>
             <button className="icon-button notification-button" aria-label="การแจ้งเตือน" onClick={() => notify('ยังไม่มีการแจ้งเตือนใหม่')}><Bell size={18} /><i /></button>
             <div className="top-avatar">J</div>
+=======
+            <div className="local-badge"><span /> Supabase</div>
+            <button className="icon-button notification-button" aria-label="การแจ้งเตือน" onClick={() => setNotice('ยังไม่มีการแจ้งเตือนใหม่')}><Bell size={18} /><i /></button>
+            <div className="top-avatar">{displayName.slice(0, 1).toUpperCase()}</div>
+>>>>>>> bdee6feef93e04f1ca58e5d2b422188b6f75ad01
           </div>
         </header>
 
         <div className="page-content">
-          {activeNav === 'คลังนิยาย' ? (
+          {novelLoadError && <p className="database-error" role="alert">เชื่อมต่อคลังนิยายไม่สำเร็จ: {novelLoadError}</p>}
+          {loadingNovels ? <div className="empty-state" role="status">กำลังโหลดคลังนิยายจาก Supabase...</div> : activeNav === 'คลังนิยาย' ? (
             <LibraryPage novels={filteredNovels} search={search} setSearch={setSearch} onCreate={() => setShowCreate(true)} onOpen={setSelectedNovel} onDelete={deleteNovel} />
           ) : activeNav === 'พล็อตและตัวละคร' ? (
             <ComingSoon title="พล็อตและตัวละคร" description="พื้นที่สำหรับ Story Bible, เส้นเรื่องหลัก และรายละเอียดตัวละคร จะเชื่อมกับฐานข้อมูลในขั้นถัดไป" onBack={() => setActiveNav('ภาพรวม')} />
@@ -260,10 +369,35 @@ function DashboardApp() {
         </div>
       </main>
 
+<<<<<<< HEAD
       {showCreate && <CreateNovelModal form={form} setForm={setForm} onClose={() => setShowCreate(false)} onSubmit={createNovel} />}
       {selectedNovel && <NovelDetailModal novel={selectedNovel} onClose={() => setSelectedNovel(null)} onDelete={() => deleteNovel(selectedNovel.id)} onUpdate={(patch) => updateNovel(selectedNovel.id, patch)} onGenerateChapter={generateNextChapter} isGenerating={generatingNovelId === selectedNovel.id} isBusy={generatingNovelId !== null} />}
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} onReset={() => { if (window.confirm('ต้องการคืนค่าข้อมูลตัวอย่างหรือไม่? ข้อมูลที่สร้างไว้ในเครื่องนี้จะถูกแทนที่')) { setNovels(starterNovels); setShowSettings(false); notify('คืนค่าข้อมูลตัวอย่างแล้ว') } }} />}
       {notice && <div className={`toast ${noticeIsError ? 'toast-error' : ''}`} role={noticeIsError ? 'alert' : 'status'}>{noticeIsError ? <CircleAlert size={18} /> : <CheckCircle2 size={18} />}<span>{notice}</span><button aria-label="ปิดข้อความ" onClick={() => setNotice('')}><X size={16} /></button></div>}
+=======
+      {showCreate && <CreateNovelModal form={form} setForm={setForm} onClose={() => setShowCreate(false)} onSubmit={createNovel} submitting={savingNovel} />}
+      {selectedNovel && <NovelDetailModal
+        key={selectedNovel.id}
+        novel={selectedNovel}
+        onClose={() => setSelectedNovel(null)}
+        onDelete={() => void deleteNovel(selectedNovel.id)}
+        onUpdate={(patch) => updateNovel(selectedNovel.id, patch)}
+        onRead={() => {
+          setSelectedNovel(null)
+          void openReader(selectedNovel)
+        }}
+        onChapterSaved={(count) => onChapterSaved(selectedNovel.id, count)}
+      />}
+      {readingNovel && <NovelReaderModal
+        novel={readingNovel}
+        chapters={readerChapters}
+        loading={readerLoading}
+        error={readerError}
+        onClose={() => setReadingNovel(null)}
+      />}
+      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+      {notice && <div className="toast" role="status"><CheckCircle2 size={18} /><span>{notice}</span><button aria-label="ปิดข้อความ" onClick={() => setNotice('')}><X size={16} /></button></div>}
+>>>>>>> bdee6feef93e04f1ca58e5d2b422188b6f75ad01
     </div>
   )
 }
@@ -290,7 +424,7 @@ function Dashboard({ novels, search, setSearch, onCreate, onOpen, onDelete, tota
       <StatCard icon={<BookOpen size={18} />} label="โปรเจกต์นิยาย" value={String(totalNovels)} note="เรื่องในคลังของคุณ" tint="pink" />
       <StatCard icon={<PenLine size={18} />} label="บทที่เขียนแล้ว" value={String(writtenChapters)} note={`จากเป้าหมาย ${totalChapters} บท`} tint="purple" />
       <StatCard icon={<Sparkles size={18} />} label="ความคืบหน้าเฉลี่ย" value={`${averageProgress}%`} note="คำนวณจากจำนวนบท" tint="peach" />
-      <StatCard icon={<Clock3 size={18} />} label="โหมดการทำงาน" value="ส่วนตัว" note="ข้อมูลอยู่ในเบราว์เซอร์นี้" tint="blue" />
+      <StatCard icon={<Clock3 size={18} />} label="โหมดการทำงาน" value="ส่วนตัว" note="จัดเก็บด้วย Supabase" tint="blue" />
     </section>
 
     <section className="section-heading"><div><div className="section-eyebrow">KEEP THE MAGIC GOING</div><h2>นิยายของคุณ <span className="heading-count">{totalNovels}</span></h2><p>กลับไปเขียนต่อ หรือเริ่มต้นเรื่องใหม่ได้ทุกเมื่อ</p></div><button className="text-button" onClick={onCreate}>ดูไอเดียใหม่ <ArrowUpRight size={15} /></button></section>
@@ -321,23 +455,40 @@ function LibraryPage({ novels, search, setSearch, onCreate, onOpen, onDelete }: 
   return <><section className="welcome-row library-welcome"><div><div className="eyebrow"><LibraryBig size={14} /> YOUR COLLECTION</div><h1>คลัง<span>นิยาย</span></h1><p className="welcome-subtitle">ทุกโปรเจกต์และไอเดียของคุณอยู่ที่นี่</p></div><button className="primary-button" onClick={onCreate}><Plus size={18} /> สร้างนิยายใหม่</button></section><div className="library-toolbar"><div className="search-box"><Search size={17} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="ค้นหานิยาย..." aria-label="ค้นหานิยาย" /></div><span className="result-count">{novels.length} โปรเจกต์</span></div><NovelGrid novels={novels} onOpen={onOpen} onDelete={onDelete} /></>
 }
 
-function CreateNovelModal({ form, setForm, onClose, onSubmit }: { form: NewNovelInput; setForm: (form: NewNovelInput) => void; onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+function CreateNovelModal({ form, setForm, onClose, onSubmit, submitting }: { form: NewNovelInput; setForm: (form: NewNovelInput) => void; onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void; submitting: boolean }) {
   return <Modal onClose={onClose} wide><div className="modal-heading"><div className="modal-icon"><BookPlus size={21} /></div><div><div className="section-eyebrow">A NEW STORY BEGINS</div><h2>สร้างนิยายเรื่องใหม่</h2><p>เริ่มจากไอเดีย แล้วค่อย ๆ สร้างโลกของคุณ</p></div><button className="modal-close" onClick={onClose} aria-label="ปิด"><X size={19} /></button></div><form className="novel-form" onSubmit={onSubmit}>
     <label>ชื่อเรื่อง <span>*</span><input autoFocus required maxLength={120} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="เช่น ถ้าชาติหน้ามีจริง ขอให้เราได้รักกัน" /></label>
     <label>แนวนิยาย<select value={form.genre} onChange={(e) => setForm({ ...form, genre: e.target.value as Genre })}>{genres.map((genre) => <option key={genre}>{genre}</option>)}</select></label>
     <label>ไอเดียหลัก / เรื่องย่อ<textarea rows={4} maxLength={3000} value={form.premise} onChange={(e) => setForm({ ...form, premise: e.target.value })} placeholder="เล่าให้ฟังว่าเรื่องนี้เกี่ยวกับใคร ตัวละครต้องการอะไร และมีอุปสรรคอะไร..." /><small>เขียนเท่าที่มีได้ คุณกลับมาแก้ไขภายหลังได้</small></label>
     <label>จำนวนบทเป้าหมาย<input type="number" min={1} max={100} value={form.chaptersTarget} onChange={(e) => setForm({ ...form, chaptersTarget: Number(e.target.value) })} /><small>ตั้งต้นไว้ที่ 30 บท สามารถปรับได้ระหว่างพัฒนา</small></label>
+<<<<<<< HEAD
     <div className="form-note"><Sparkles size={16} /><span>เมื่อกดสร้าง ระบบจะบันทึกโปรเจกต์และให้ AI เขียนบทแรกให้ทันที บทที่เขียนแล้วจะเปิดอ่านและบันทึกไว้ในเบราว์เซอร์นี้</span></div>
     <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>ยกเลิก</button><button type="submit" className="primary-button"><WandSparkles size={17} /> สร้างนิยายและเขียนบทแรก</button></div>
   </form></Modal>
 }
 
 function NovelDetailModal({ novel, onClose, onDelete, onUpdate, onGenerateChapter, isGenerating, isBusy }: { novel: Novel; onClose: () => void; onDelete: () => void; onUpdate: (patch: Partial<Novel>) => void; onGenerateChapter: (novel: Novel) => Promise<void>; isGenerating: boolean; isBusy: boolean }) {
+=======
+    <div className="form-note"><Sparkles size={16} /><span>สร้างโปรเจกต์ก่อน แล้วเปิดรายละเอียดเพื่อให้ AI ช่วยวางพล็อต สร้างตัวละคร และเขียนทีละบท</span></div>
+    <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose} disabled={submitting}>ยกเลิก</button><button type="submit" className="primary-button" disabled={submitting}>{submitting ? 'กำลังบันทึก...' : <><Plus size={17} /> สร้างโปรเจกต์</>}</button></div>
+  </form></Modal>
+}
+
+function NovelDetailModal({ novel, onClose, onDelete, onUpdate, onRead, onChapterSaved }: {
+  novel: Novel;
+  onClose: () => void;
+  onDelete: () => void;
+  onUpdate: (patch: Partial<Novel>) => Promise<void>;
+  onRead: () => void;
+  onChapterSaved: (count: number) => void;
+}) {
+>>>>>>> bdee6feef93e04f1ca58e5d2b422188b6f75ad01
   const [title, setTitle] = useState(novel.title)
   const [premise, setPremise] = useState(novel.premise)
   const [genre, setGenre] = useState<Genre>(novel.genre)
   const [target, setTarget] = useState(novel.chaptersTarget)
   const [chapters, setChapters] = useState(novel.chaptersWritten)
+<<<<<<< HEAD
   const [readingChapter, setReadingChapter] = useState<number | null>(null)
   const novelChapters = novel.chapters ?? []
   const activeChapter = novelChapters.find((chapter) => chapter.number === readingChapter)
@@ -345,10 +496,115 @@ function NovelDetailModal({ novel, onClose, onDelete, onUpdate, onGenerateChapte
     event.preventDefault()
     onUpdate({ title: title.trim() || novel.title, premise: premise.trim(), genre, chaptersTarget: Math.min(100, Math.max(1, target)), chaptersWritten: Math.min(Math.max(chapters, novelChapters.length), Math.max(1, target)) })
     onClose()
+=======
+  const [outline, setOutline] = useState<NovelOutline | null>(null)
+  const [characters, setCharacters] = useState<NovelCharacter[]>([])
+  const [generatedChapters, setGeneratedChapters] = useState<GeneratedChapter[]>([])
+  const [generationAction, setGenerationAction] = useState<'outline' | 'characters' | 'chapter' | null>(null)
+  const [generationError, setGenerationError] = useState('')
+  const [workspaceLoading, setWorkspaceLoading] = useState(true)
+  const [savingNovel, setSavingNovel] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    void loadNovelWorkspace(novel.id).then((workspace) => {
+      if (!active) return
+      setOutline(workspace.outline)
+      setCharacters(workspace.characters)
+      setGeneratedChapters(workspace.chapters)
+      setChapters(workspace.chapters.length)
+    }).catch((error: unknown) => {
+      if (active) {
+        setGenerationError(error instanceof Error ? `โหลดนิยายไม่สำเร็จ: ${error.message}` : 'โหลดนิยายไม่สำเร็จ')
+      }
+    }).finally(() => {
+      if (active) setWorkspaceLoading(false)
+    })
+    return () => { active = false }
+  }, [novel.id])
+
+  async function generate(action: 'outline' | 'characters' | 'chapter') {
+    setGenerationError('')
+    setGenerationAction(action)
+    try {
+      if (workspaceLoading) throw new Error('กำลังโหลดเนื้อหานิยาย กรุณารอสักครู่แล้วลองใหม่')
+      const novelContext = {
+        title: title.trim(),
+        genre,
+        premise: premise.trim(),
+        chaptersTarget: Math.min(100, Math.max(1, Number(target) || 30)),
+      }
+      if (!novelContext.title) throw new Error('กรุณากรอกชื่อเรื่องก่อนสร้างเนื้อหา')
+      await onUpdate(novelContext)
+      if (action === 'outline') {
+        const result = await generateNovelContent({
+          action,
+          novel: novelContext,
+        })
+        await saveNovelOutline(novel.id, result)
+        setOutline(result)
+      } else if (action === 'characters') {
+        const result = await generateNovelContent({
+          action,
+          novel: novelContext,
+          outline,
+        })
+        await saveNovelCharacters(novel.id, result.characters)
+        setCharacters(result.characters)
+      } else {
+        const chapterNumber = generatedChapters.reduce((highest, chapter) => Math.max(highest, chapter.chapterNumber), 0) + 1
+        if (chapterNumber > novelContext.chaptersTarget) throw new Error('เขียนครบจำนวนบทเป้าหมายแล้ว')
+        const result = await generateNovelContent({
+          action,
+          novel: novelContext,
+          outline,
+          characters,
+          previousChapters: generatedChapters.slice(-3).map(({ chapterNumber: number, title: chapterTitle, summary, keyEvents }) => ({
+            chapterNumber: number,
+            title: chapterTitle,
+            summary,
+            keyEvents,
+          })),
+          chapterNumber,
+        })
+        if (result.chapterNumber !== chapterNumber) {
+          throw new Error('AI ส่งหมายเลขบทไม่ตรงกับลำดับถัดไป กรุณาลองใหม่')
+        }
+        const chapterCount = await saveNovelChapter(novel.id, result)
+        setGeneratedChapters((current) => [...current, result])
+        setChapters(chapterCount)
+        onChapterSaved(chapterCount)
+      }
+    } catch (error) {
+      setGenerationError(error instanceof Error ? error.message : 'สร้างเนื้อหาไม่สำเร็จ กรุณาลองใหม่')
+    } finally {
+      setGenerationAction(null)
+    }
+>>>>>>> bdee6feef93e04f1ca58e5d2b422188b6f75ad01
   }
-  return <Modal onClose={onClose} wide><div className="modal-heading"><div className={`detail-cover-mini ${novel.accent}`}>✦</div><div><div className="section-eyebrow">NOVEL WORKSPACE</div><h2>รายละเอียดนิยาย</h2><p>แก้ไขข้อมูลโปรเจกต์ของคุณ</p></div><button className="modal-close" onClick={onClose} aria-label="ปิด"><X size={19} /></button></div><form className="novel-form" onSubmit={save}>
+
+  async function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setSavingNovel(true)
+    try {
+      await onUpdate({
+        title: title.trim() || novel.title,
+        premise: premise.trim(),
+        genre,
+        chaptersTarget: Math.min(100, Math.max(1, target)),
+        chaptersWritten: chapters,
+      })
+      onClose()
+    } catch (error) {
+      setGenerationError(error instanceof Error ? `บันทึกนิยายไม่สำเร็จ: ${error.message}` : 'บันทึกนิยายไม่สำเร็จ')
+    } finally {
+      setSavingNovel(false)
+    }
+  }
+  return <Modal onClose={onClose} wide><div className="modal-heading"><div className={`detail-cover-mini ${novel.accent}`}>✦</div><div><div className="section-eyebrow">NOVEL WORKSPACE</div><h2>รายละเอียดนิยาย</h2><p>แก้ไขข้อมูลและเนื้อหาของคุณ</p></div><button className="modal-close" onClick={onClose} aria-label="ปิด"><X size={19} /></button></div><form className="novel-form" onSubmit={save}>
     <label>ชื่อเรื่อง<input required value={title} onChange={(e) => setTitle(e.target.value)} /></label>
     <label>แนวนิยาย<select value={genre} onChange={(e) => setGenre(e.target.value as Genre)}>{genres.map((item) => <option key={item}>{item}</option>)}</select></label>
+<<<<<<< HEAD
     <label>เรื่องย่อ<textarea rows={4} value={premise} onChange={(e) => setPremise(e.target.value)} /></label>
     <div className="form-two-columns"><label>บทเป้าหมาย<input type="number" min={1} max={100} value={target} onChange={(e) => setTarget(Number(e.target.value))} /></label><label>บทที่เขียนแล้ว<input type="number" min={0} max={100} value={chapters} onChange={(e) => setChapters(Number(e.target.value))} /></label></div>
     <section className="chapter-library" aria-label="บทนิยาย">
@@ -386,83 +642,124 @@ function NovelDetailModal({ novel, onClose, onDelete, onUpdate, onGenerateChapte
     </section>
     <div className="form-note"><BookOpen size={16} /><span>ข้อมูลนี้เก็บใน localStorage ของเบราว์เซอร์ที่ใช้งานอยู่</span></div>
     <div className="modal-actions spread"><button type="button" className="danger-button" onClick={onDelete}><Trash2 size={16} /> ลบโปรเจกต์</button><div><button type="button" className="secondary-button" onClick={onClose}>ยกเลิก</button><button type="submit" className="primary-button"><CheckCircle2 size={16} /> บันทึก</button></div></div>
+=======
+    <label>เรื่องย่อ<textarea rows={4} maxLength={3000} value={premise} onChange={(e) => setPremise(e.target.value)} /></label>
+    <div className="form-two-columns"><label>บทเป้าหมาย<input type="number" min={1} max={100} value={target} onChange={(e) => setTarget(Number(e.target.value))} /></label><label>บทที่บันทึกแล้ว<input type="number" min={0} max={100} value={chapters} readOnly /></label></div>
+    <section className="generation-panel" aria-label="สร้างเนื้อหาด้วย AI">
+      <h3><Sparkles size={16} /> สร้างเนื้อหาด้วย AI</h3>
+      <p>AI จะสร้างโครงเรื่องและตัวละครแยกจากกัน จากนั้นเขียนครั้งละหนึ่งบทพร้อมบริบทสรุปบทก่อนหน้า</p>
+      <button type="button" className="secondary-button reader-open-button" onClick={onRead} disabled={!generatedChapters.length}>อ่านนิยาย ({generatedChapters.length} บท)</button>
+      <div className="generation-actions">
+        <button type="button" className="secondary-button" disabled={generationAction !== null || workspaceLoading} onClick={() => void generate('outline')}>
+          {generationAction === 'outline' ? 'กำลังสร้างโครงเรื่อง...' : outline ? 'สร้างโครงเรื่องใหม่' : 'สร้างโครงเรื่อง'}
+        </button>
+        <button type="button" className="secondary-button" disabled={generationAction !== null || workspaceLoading} onClick={() => void generate('characters')}>
+          {generationAction === 'characters' ? 'กำลังสร้างตัวละคร...' : characters.length ? 'สร้างตัวละครใหม่' : 'สร้างตัวละคร'}
+        </button>
+        <button type="button" className="secondary-button" disabled={generationAction !== null || workspaceLoading || generatedChapters.reduce((highest, chapter) => Math.max(highest, chapter.chapterNumber), 0) >= target} onClick={() => void generate('chapter')}>
+          {generationAction === 'chapter' ? 'กำลังเขียนบท...' : `เขียนบทถัดไป (${generatedChapters.reduce((highest, chapter) => Math.max(highest, chapter.chapterNumber), 0) + 1}/${target})`}
+        </button>
+      </div>
+      {workspaceLoading && <p role="status" className="generation-status">กำลังโหลดข้อมูลนิยาย...</p>}
+      {generationAction && <p role="status" className="generation-status">กำลังสร้างเนื้อหา กรุณารอสักครู่...</p>}
+      {generationError && <p role="alert" className="generation-error">{generationError} กรุณากดปุ่มสร้างอีกครั้งเพื่อลองใหม่</p>}
+      <p className="generation-storage-note">ผลลัพธ์จะบันทึกลง Supabase และเปิดอ่านได้จากปุ่ม “อ่านนิยาย”</p>
+      {outline && <article className="generated-result"><h4>โครงเรื่อง</h4><p><strong>Logline:</strong> {outline.logline}</p><p>{outline.synopsis}</p><p><strong>ความต่อเนื่อง:</strong> {outline.continuitySummary}</p><ol>{outline.chapters.map((chapter) => <li key={chapter.number}><strong>บทที่ {chapter.number}: {chapter.title}</strong><p>{chapter.summary}</p></li>)}</ol></article>}
+      {!!characters.length && <article className="generated-result"><h4>ตัวละคร</h4>{characters.map((character) => <p key={character.name}><strong>{character.name} — {character.role}</strong><br />{character.description}<br />เป้าหมาย: {character.motivation}<br />เส้นทางตัวละคร: {character.arc}</p>)}</article>}
+      {generatedChapters.map((chapter) => <article className="generated-result" key={chapter.chapterNumber}><h4>บทที่ {chapter.chapterNumber}: {chapter.title}</h4><p className="generated-chapter-content">{chapter.content}</p><p><strong>สรุป:</strong> {chapter.summary}</p><p><strong>เหตุการณ์สำคัญ:</strong> {chapter.keyEvents.join(' · ')}</p><p><strong>ปมที่ยังไม่คลี่คลาย:</strong> {chapter.unresolvedThreads.join(' · ') || 'ไม่มี'}</p></article>)}
+    </section>
+    <div className="form-note"><BookOpen size={16} /><span>ข้อมูลเรื่อง โครงเรื่อง ตัวละคร และบทนิยายบันทึกใน Supabase ภายใต้บัญชีของคุณ</span></div>
+    <div className="modal-actions spread"><button type="button" className="danger-button" onClick={onDelete}><Trash2 size={16} /> ลบโปรเจกต์</button><div><button type="button" className="secondary-button" onClick={onClose} disabled={savingNovel}>ยกเลิก</button><button type="submit" className="primary-button" disabled={savingNovel}>{savingNovel ? 'กำลังบันทึก...' : <><CheckCircle2 size={16} /> บันทึก</>}</button></div></div>
+>>>>>>> bdee6feef93e04f1ca58e5d2b422188b6f75ad01
   </form></Modal>
 }
 
-function SettingsModal({ onClose, onReset }: { onClose: () => void; onReset: () => void }) {
-  return <Modal onClose={onClose}><div className="modal-heading"><div className="modal-icon"><Settings2 size={21} /></div><div><div className="section-eyebrow">PREFERENCES</div><h2>ตั้งค่า</h2><p>การตั้งค่าของต้นแบบปัจจุบัน</p></div><button className="modal-close" onClick={onClose} aria-label="ปิด"><X size={19} /></button></div><div className="settings-content"><div className="setting-row"><div><strong>การจัดเก็บข้อมูล</strong><p>บันทึกใน localStorage ของเบราว์เซอร์</p></div><span className="setting-tag">Local</span></div><div className="setting-row"><div><strong>AI Generation</strong><p>ยังไม่ได้เชื่อมต่อ API</p></div><span className="setting-tag pending">รอตั้งค่า</span></div><div className="setting-row"><div><strong>บัญชีผู้ใช้</strong><p>ยังไม่มีระบบสมัครสมาชิก</p></div><span className="setting-tag pending">Demo</span></div><button className="secondary-button full-button" onClick={onReset}>คืนค่าข้อมูลตัวอย่าง</button></div></Modal>
+function NovelReaderModal({ novel, chapters, loading, error, onClose }: {
+  novel: Novel;
+  chapters: GeneratedChapter[];
+  loading: boolean;
+  error: string;
+  onClose: () => void;
+}) {
+  const [chapterNumber, setChapterNumber] = useState(chapters[0]?.chapterNumber ?? 1)
+  const selectedChapter = chapters.find((chapter) => chapter.chapterNumber === chapterNumber)
+  const selectedIndex = chapters.findIndex((chapter) => chapter.chapterNumber === chapterNumber)
+
+  useEffect(() => {
+    if (chapters.length && !chapters.some((chapter) => chapter.chapterNumber === chapterNumber)) {
+      setChapterNumber(chapters[0].chapterNumber)
+    }
+  }, [chapters, chapterNumber])
+
+  return <Modal onClose={onClose} wide className="reader-modal">
+    <header className="reader-header">
+      <div><div className="section-eyebrow">NOVEL READER</div><h2>{novel.title}</h2><p>{novel.genre} · {chapters.length} บท</p></div>
+      <button className="modal-close" onClick={onClose} aria-label="ปิดหน้าการอ่าน"><X size={19} /></button>
+    </header>
+    {loading ? <p role="status" className="reader-state">กำลังโหลดบทจาก Supabase...</p>
+      : error ? <p role="alert" className="generation-error">{error}</p>
+        : !chapters.length ? <div className="reader-empty"><BookOpen size={28} /><strong>ยังไม่มีบทที่เขียนแล้ว</strong><p>สร้างบทจากรายละเอียดนิยาย แล้วบทที่บันทึกสำเร็จจะแสดงที่นี่</p></div>
+          : <div className="reader-layout">
+            <nav className="reader-chapter-list" aria-label="สารบัญบทนิยาย">
+              <strong>สารบัญ</strong>
+              {chapters.map((chapter) => <button
+                type="button"
+                key={chapter.chapterNumber}
+                className={chapter.chapterNumber === chapterNumber ? 'selected' : ''}
+                onClick={() => setChapterNumber(chapter.chapterNumber)}
+              >
+                <span>บทที่ {chapter.chapterNumber}</span>
+                <small>{chapter.title}</small>
+              </button>)}
+            </nav>
+            {selectedChapter && <article className="reader-page">
+              <div className="reader-page-kicker">{novel.title} · บทที่ {selectedChapter.chapterNumber}</div>
+              <h1>{selectedChapter.title}</h1>
+              {selectedChapter.summary && <p className="reader-summary">{selectedChapter.summary}</p>}
+              <div className="reader-content">{selectedChapter.content}</div>
+              <div className="reader-navigation">
+                <button type="button" className="secondary-button" disabled={selectedIndex <= 0} onClick={() => setChapterNumber(chapters[selectedIndex - 1].chapterNumber)}>บทก่อนหน้า</button>
+                <span>{selectedIndex + 1} / {chapters.length}</span>
+                <button type="button" className="secondary-button" disabled={selectedIndex < 0 || selectedIndex >= chapters.length - 1} onClick={() => setChapterNumber(chapters[selectedIndex + 1].chapterNumber)}>บทถัดไป</button>
+              </div>
+            </article>}
+          </div>}
+  </Modal>
+}
+
+function SettingsModal({ onClose }: { onClose: () => void }) {
+  return <Modal onClose={onClose}><div className="modal-heading"><div className="modal-icon"><Settings2 size={21} /></div><div><div className="section-eyebrow">PREFERENCES</div><h2>ตั้งค่า</h2><p>สถานะการเชื่อมต่อ</p></div><button className="modal-close" onClick={onClose} aria-label="ปิด"><X size={19} /></button></div><div className="settings-content"><div className="setting-row"><div><strong>การจัดเก็บข้อมูล</strong><p>นิยาย ตัวละคร โครงเรื่อง และบท บันทึกใน Supabase</p></div><span className="setting-tag">Supabase</span></div><div className="setting-row"><div><strong>AI Generation</strong><p>สร้างผ่าน Edge Function โดยตรวจสอบ Supabase Auth</p></div><span className="setting-tag">พร้อมใช้</span></div><div className="setting-row"><div><strong>บัญชีผู้ใช้</strong><p>Supabase Auth</p></div><span className="setting-tag">เชื่อมต่อ</span></div></div></Modal>
 }
 
 function ComingSoon({ title, description, onBack }: { title: string; description: string; onBack: () => void }) {
   return <div className="coming-soon"><div className="coming-icon"><WandSparkles size={27} /></div><div className="section-eyebrow">IN DEVELOPMENT</div><h1>{title}</h1><p>{description}</p><button className="primary-button" onClick={onBack}>กลับหน้าภาพรวม</button></div>
 }
 
-function Modal({ children, onClose, wide = false }: { children: React.ReactNode; onClose: () => void; wide?: boolean }) {
+function Modal({ children, onClose, wide = false, className = '' }: { children: React.ReactNode; onClose: () => void; wide?: boolean; className?: string }) {
   useEffect(() => {
     function onKey(event: KeyboardEvent) { if (event.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
-  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><section className={`modal-panel ${wide ? 'modal-wide' : ''}`} role="dialog" aria-modal="true">{children}</section></div>
+  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><section className={`modal-panel ${wide ? 'modal-wide' : ''} ${className}`} role="dialog" aria-modal="true">{children}</section></div>
 }
 
 function App() {
-  const { user: firebaseUser, loading: checkingFirebaseAuth } = useAuth()
-  const [session, setSession] = useState<Session | null>(null)
-  const [checkingSession, setCheckingSession] = useState(true)
+  const { user, loading } = useAuth()
 
-  useEffect(() => {
-    const client = supabase
-
-    if (!client) {
-      setCheckingSession(false)
-      return
-    }
-
-    const auth = client.auth
-    let active = true
-
-    async function loadSession() {
-      try {
-        const { data, error } = await auth.getSession()
-        if (error) throw error
-        if (!active) return
-
-        setSession(data.session)
-        setCheckingSession(false)
-      } catch (error) {
-        console.error('ตรวจสอบสถานะเข้าสู่ระบบไม่สำเร็จ:', error)
-        if (active) {
-          setSession(null)
-          setCheckingSession(false)
-        }
-      }
-    }
-
-    void loadSession()
-
-    const {
-      data: { subscription },
-    } = auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession)
-      setCheckingSession(false)
-    })
-
-    return () => {
-      active = false
-      subscription.unsubscribe()
-    }
-  }, [])
-
-  if (checkingSession || checkingFirebaseAuth) {
+  if (loading) {
     return <div style={{ padding: 32 }}>กำลังตรวจสอบบัญชี...</div>
   }
 
-  if (!session && !firebaseUser) {
+  if (!user) {
     return <LoginPage supabaseConfigurationError={supabaseConfigurationError} />
   }
 
-  return <DashboardApp />
+  const displayName = typeof user.user_metadata.display_name === 'string'
+    ? user.user_metadata.display_name
+    : user.email ?? 'นักเขียน'
+
+  return <DashboardApp key={user.id} userId={user.id} displayName={displayName} />
 }
 
 
