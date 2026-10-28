@@ -10,9 +10,11 @@ import {
   Settings2, CircleHelp, Bell, ChevronDown, Plus, MoreHorizontal,
   PenLine, Trash2, WandSparkles, Clock3, FileText, Heart, X, ArrowUpRight,
   CheckCircle2, SlidersHorizontal, Feather, Stars, PanelLeftClose,
+  LoaderCircle, BookMarked, ChevronLeft, ChevronRight, CircleAlert,
 } from 'lucide-react'
 import { starterNovels } from './data'
-import type { Genre, NewNovelInput, Novel } from './types'
+import type { Genre, NewNovelInput, Novel, NovelChapter } from './types'
+import { generateNovelChapter } from './lib/novelAi'
 
 const STORAGE_KEY = 'novel-ai-studio:novels:v1'
 const genres: Genre[] = ['โรแมนซ์', 'แฟนตาซี', 'สืบสวน', 'ดราม่า', 'ไซไฟ', 'วาย / ยูริ', 'อื่น ๆ']
@@ -32,22 +34,30 @@ function makeId() {
 }
 
 function DashboardApp() {
+  const { user: firebaseUser } = useAuth()
   const [novels, setNovels] = useState<Novel[]>(loadNovels)
   const [search, setSearch] = useState('')
   const [activeNav, setActiveNav] = useState('ภาพรวม')
   const [showCreate, setShowCreate] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [selectedNovel, setSelectedNovel] = useState<Novel | null>(null)
+  const [generatingNovelId, setGeneratingNovelId] = useState<string | null>(null)
   const [notice, setNotice] = useState('')
+  const [noticeIsError, setNoticeIsError] = useState(false)
   const [form, setForm] = useState<NewNovelInput>({
     title: '', genre: 'โรแมนซ์', premise: '', chaptersTarget: 30,
   })
+
+  function notify(message: string, isError = false) {
+    setNoticeIsError(isError)
+    setNotice(message)
+  }
 
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(novels))
     } catch {
-      setNotice('บันทึกในเบราว์เซอร์ไม่สำเร็จ กรุณาตรวจสอบพื้นที่จัดเก็บ')
+      notify('บันทึกในเบราว์เซอร์ไม่สำเร็จ กรุณาตรวจสอบพื้นที่จัดเก็บ', true)
     }
   }, [novels])
 
@@ -69,7 +79,7 @@ function DashboardApp() {
   const writtenChapters = novels.reduce((sum, novel) => sum + novel.chaptersWritten, 0)
   const averageProgress = totalChapters ? Math.round((writtenChapters / totalChapters) * 100) : 0
 
-  function createNovel(event: FormEvent<HTMLFormElement>) {
+  async function createNovel(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const title = form.title.trim()
     if (!title) return
@@ -80,6 +90,7 @@ function DashboardApp() {
       premise: form.premise.trim(),
       chaptersTarget: Math.min(100, Math.max(1, Number(form.chaptersTarget) || 30)),
       chaptersWritten: 0,
+      chapters: [],
       updatedAt: 'เพิ่งสร้าง',
       status: 'วางพล็อต',
       accent: ['pink', 'purple', 'peach', 'blue'][novels.length % 4] as Novel['accent'],
@@ -88,7 +99,66 @@ function DashboardApp() {
     setForm({ title: '', genre: 'โรแมนซ์', premise: '', chaptersTarget: 30 })
     setShowCreate(false)
     setActiveNav('คลังนิยาย')
-    setNotice('สร้างโปรเจกต์นิยายแล้ว และบันทึกไว้ในเบราว์เซอร์นี้')
+    setSelectedNovel(nextNovel)
+    notify('สร้างโปรเจกต์แล้ว กำลังให้ AI เขียนบทแรก')
+    await generateNextChapter(nextNovel)
+  }
+
+  async function generateNextChapter(novel: Novel) {
+    const chapters = novel.chapters ?? []
+    if (chapters.length >= novel.chaptersTarget) {
+      notify('เขียนครบตามจำนวนบทเป้าหมายแล้ว')
+      return
+    }
+    if (generatingNovelId) {
+      notify('กำลังเขียนบทนิยายเรื่องอื่นอยู่ กรุณารอสักครู่')
+      return
+    }
+
+    setGeneratingNovelId(novel.id)
+    try {
+      if (!supabase) {
+        throw new Error(supabaseConfigurationError ?? 'ยังไม่ได้ตั้งค่าการเชื่อมต่อ Supabase')
+      }
+
+      const { data, error } = await supabase.auth.getSession()
+      if (error) throw error
+      const accessToken = data.session?.access_token ?? await firebaseUser?.getIdToken()
+      if (!accessToken) {
+        throw new Error('เซสชันหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง')
+      }
+
+      const generated = await generateNovelChapter({
+        title: novel.title,
+        genre: novel.genre,
+        premise: novel.premise,
+        chapterNumber: chapters.length + 1,
+        previousChapter: chapters.length
+          ? { title: chapters[chapters.length - 1].title, content: chapters[chapters.length - 1].content }
+          : null,
+      }, accessToken)
+      const newChapter: NovelChapter = {
+        number: chapters.length + 1,
+        title: generated.title,
+        content: generated.content,
+        createdAt: new Date().toISOString(),
+      }
+      const updatedNovel: Novel = {
+        ...novel,
+        chapters: [...chapters, newChapter],
+        chaptersWritten: chapters.length + 1,
+        status: 'กำลังเขียน',
+        updatedAt: 'เพิ่งเขียน',
+      }
+
+      setNovels((current) => current.map((item) => item.id === novel.id ? updatedNovel : item))
+      setSelectedNovel((current) => current?.id === novel.id ? updatedNovel : current)
+      notify(`AI เขียนบทที่ ${newChapter.number} เสร็จแล้ว`)
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'AI เขียนบทไม่สำเร็จ กรุณาลองอีกครั้ง', true)
+    } finally {
+      setGeneratingNovelId(null)
+    }
   }
 
   function deleteNovel(id: string) {
@@ -96,13 +166,13 @@ function DashboardApp() {
     if (!target || !window.confirm(`ต้องการลบโปรเจกต์ “${target.title}” หรือไม่?`)) return
     setNovels((current) => current.filter((novel) => novel.id !== id))
     setSelectedNovel(null)
-    setNotice('ลบโปรเจกต์แล้ว')
+    notify('ลบโปรเจกต์แล้ว')
   }
 
   function updateNovel(id: string, patch: Partial<Novel>) {
     setNovels((current) => current.map((novel) => novel.id === id ? { ...novel, ...patch, updatedAt: 'แก้ไขล่าสุด' } : novel))
     setSelectedNovel((current) => current?.id === id ? { ...current, ...patch, updatedAt: 'แก้ไขล่าสุด' } : current)
-    setNotice('บันทึกการแก้ไขแล้ว')
+    notify('บันทึกการแก้ไขแล้ว')
   }
 
   function navTo(label: string) {
@@ -131,13 +201,13 @@ function DashboardApp() {
           <NavButton icon={<LayoutDashboard size={18} />} label="ภาพรวม" active={activeNav === 'ภาพรวม'} onClick={() => navTo('ภาพรวม')} />
           <NavButton icon={<LibraryBig size={18} />} label="คลังนิยาย" active={activeNav === 'คลังนิยาย'} onClick={() => navTo('คลังนิยาย')} count={novels.length} />
           <NavButton icon={<WandSparkles size={18} />} label="สร้างนิยายด้วย AI" active={activeNav === 'สร้างนิยายด้วย AI'} onClick={() => navTo('สร้างนิยายด้วย AI')} />
-          <NavButton icon={<FileText size={18} />} label="พล็อตและตัวละคร" active={activeNav === 'พล็อตและตัวละคร'} onClick={() => { navTo('พล็อตและตัวละคร'); setNotice('ส่วนพล็อตและตัวละครจะเชื่อมกับ Story Bible ในขั้นถัดไป') }} />
+          <NavButton icon={<FileText size={18} />} label="พล็อตและตัวละคร" active={activeNav === 'พล็อตและตัวละคร'} onClick={() => { navTo('พล็อตและตัวละคร'); notify('ส่วนพล็อตและตัวละครจะเชื่อมกับ Story Bible ในขั้นถัดไป') }} />
         </nav>
 
         <div className="side-label side-label-spaced">PERSONAL</div>
         <nav className="side-nav">
           <NavButton icon={<Settings2 size={18} />} label="ตั้งค่า" active={activeNav === 'ตั้งค่า'} onClick={() => navTo('ตั้งค่า')} />
-          <NavButton icon={<CircleHelp size={18} />} label="คู่มือการใช้งาน" active={false} onClick={() => setNotice('เริ่มจาก “สร้างนิยายใหม่” แล้วกรอกชื่อ แนวเรื่อง และไอเดียหลัก')} />
+          <NavButton icon={<CircleHelp size={18} />} label="คู่มือการใช้งาน" active={false} onClick={() => notify('เริ่มจาก “สร้างนิยายใหม่” แล้วกรอกชื่อ แนวเรื่อง และไอเดียหลัก')} />
         </nav>
 
         <div className="sidebar-bottom">
@@ -161,7 +231,7 @@ function DashboardApp() {
           <div className="breadcrumb"><span>Workspace</span><span className="crumb-slash">/</span><strong>{activeNav}</strong></div>
           <div className="top-actions">
             <div className="local-badge"><span /> บันทึกในเครื่อง</div>
-            <button className="icon-button notification-button" aria-label="การแจ้งเตือน" onClick={() => setNotice('ยังไม่มีการแจ้งเตือนใหม่')}><Bell size={18} /><i /></button>
+            <button className="icon-button notification-button" aria-label="การแจ้งเตือน" onClick={() => notify('ยังไม่มีการแจ้งเตือนใหม่')}><Bell size={18} /><i /></button>
             <div className="top-avatar">J</div>
           </div>
         </header>
@@ -183,7 +253,7 @@ function DashboardApp() {
               writtenChapters={writtenChapters}
               totalChapters={totalChapters}
               averageProgress={averageProgress}
-              onStartAI={() => setNotice('หน้าสร้างนิยายพร้อมรับไอเดียแล้ว แต่การเรียก AI จริงต้องเชื่อม API ฝั่งเซิร์ฟเวอร์ก่อน')}
+              onStartAI={() => setShowCreate(true)}
             />
           )}
           <footer className="page-footer"><span>© 2026 Novel AI Studio</span><span>Made for stories that matter <Heart size={13} fill="currentColor" /></span></footer>
@@ -191,9 +261,9 @@ function DashboardApp() {
       </main>
 
       {showCreate && <CreateNovelModal form={form} setForm={setForm} onClose={() => setShowCreate(false)} onSubmit={createNovel} />}
-      {selectedNovel && <NovelDetailModal novel={selectedNovel} onClose={() => setSelectedNovel(null)} onDelete={() => deleteNovel(selectedNovel.id)} onUpdate={(patch) => updateNovel(selectedNovel.id, patch)} />}
-      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} onReset={() => { if (window.confirm('ต้องการคืนค่าข้อมูลตัวอย่างหรือไม่? ข้อมูลที่สร้างไว้ในเครื่องนี้จะถูกแทนที่')) { setNovels(starterNovels); setShowSettings(false); setNotice('คืนค่าข้อมูลตัวอย่างแล้ว') } }} />}
-      {notice && <div className="toast" role="status"><CheckCircle2 size={18} /><span>{notice}</span><button aria-label="ปิดข้อความ" onClick={() => setNotice('')}><X size={16} /></button></div>}
+      {selectedNovel && <NovelDetailModal novel={selectedNovel} onClose={() => setSelectedNovel(null)} onDelete={() => deleteNovel(selectedNovel.id)} onUpdate={(patch) => updateNovel(selectedNovel.id, patch)} onGenerateChapter={generateNextChapter} isGenerating={generatingNovelId === selectedNovel.id} isBusy={generatingNovelId !== null} />}
+      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} onReset={() => { if (window.confirm('ต้องการคืนค่าข้อมูลตัวอย่างหรือไม่? ข้อมูลที่สร้างไว้ในเครื่องนี้จะถูกแทนที่')) { setNovels(starterNovels); setShowSettings(false); notify('คืนค่าข้อมูลตัวอย่างแล้ว') } }} />}
+      {notice && <div className={`toast ${noticeIsError ? 'toast-error' : ''}`} role={noticeIsError ? 'alert' : 'status'}>{noticeIsError ? <CircleAlert size={18} /> : <CheckCircle2 size={18} />}<span>{notice}</span><button aria-label="ปิดข้อความ" onClick={() => setNotice('')}><X size={16} /></button></div>}
     </div>
   )
 }
@@ -257,20 +327,23 @@ function CreateNovelModal({ form, setForm, onClose, onSubmit }: { form: NewNovel
     <label>แนวนิยาย<select value={form.genre} onChange={(e) => setForm({ ...form, genre: e.target.value as Genre })}>{genres.map((genre) => <option key={genre}>{genre}</option>)}</select></label>
     <label>ไอเดียหลัก / เรื่องย่อ<textarea rows={4} maxLength={3000} value={form.premise} onChange={(e) => setForm({ ...form, premise: e.target.value })} placeholder="เล่าให้ฟังว่าเรื่องนี้เกี่ยวกับใคร ตัวละครต้องการอะไร และมีอุปสรรคอะไร..." /><small>เขียนเท่าที่มีได้ คุณกลับมาแก้ไขภายหลังได้</small></label>
     <label>จำนวนบทเป้าหมาย<input type="number" min={1} max={100} value={form.chaptersTarget} onChange={(e) => setForm({ ...form, chaptersTarget: Number(e.target.value) })} /><small>ตั้งต้นไว้ที่ 30 บท สามารถปรับได้ระหว่างพัฒนา</small></label>
-    <div className="form-note"><Sparkles size={16} /><span>ขั้นนี้สร้างโปรเจกต์ก่อน การสร้างพล็อตและเขียนบทด้วย AI จะเปิดใช้เมื่อเชื่อมต่อ AI API ฝั่งเซิร์ฟเวอร์</span></div>
-    <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>ยกเลิก</button><button type="submit" className="primary-button"><Plus size={17} /> สร้างโปรเจกต์</button></div>
+    <div className="form-note"><Sparkles size={16} /><span>เมื่อกดสร้าง ระบบจะบันทึกโปรเจกต์และให้ AI เขียนบทแรกให้ทันที บทที่เขียนแล้วจะเปิดอ่านและบันทึกไว้ในเบราว์เซอร์นี้</span></div>
+    <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>ยกเลิก</button><button type="submit" className="primary-button"><WandSparkles size={17} /> สร้างนิยายและเขียนบทแรก</button></div>
   </form></Modal>
 }
 
-function NovelDetailModal({ novel, onClose, onDelete, onUpdate }: { novel: Novel; onClose: () => void; onDelete: () => void; onUpdate: (patch: Partial<Novel>) => void }) {
+function NovelDetailModal({ novel, onClose, onDelete, onUpdate, onGenerateChapter, isGenerating, isBusy }: { novel: Novel; onClose: () => void; onDelete: () => void; onUpdate: (patch: Partial<Novel>) => void; onGenerateChapter: (novel: Novel) => Promise<void>; isGenerating: boolean; isBusy: boolean }) {
   const [title, setTitle] = useState(novel.title)
   const [premise, setPremise] = useState(novel.premise)
   const [genre, setGenre] = useState<Genre>(novel.genre)
   const [target, setTarget] = useState(novel.chaptersTarget)
   const [chapters, setChapters] = useState(novel.chaptersWritten)
+  const [readingChapter, setReadingChapter] = useState<number | null>(null)
+  const novelChapters = novel.chapters ?? []
+  const activeChapter = novelChapters.find((chapter) => chapter.number === readingChapter)
   function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    onUpdate({ title: title.trim() || novel.title, premise: premise.trim(), genre, chaptersTarget: Math.min(100, Math.max(1, target)), chaptersWritten: Math.min(Math.max(0, chapters), Math.max(1, target)) })
+    onUpdate({ title: title.trim() || novel.title, premise: premise.trim(), genre, chaptersTarget: Math.min(100, Math.max(1, target)), chaptersWritten: Math.min(Math.max(chapters, novelChapters.length), Math.max(1, target)) })
     onClose()
   }
   return <Modal onClose={onClose} wide><div className="modal-heading"><div className={`detail-cover-mini ${novel.accent}`}>✦</div><div><div className="section-eyebrow">NOVEL WORKSPACE</div><h2>รายละเอียดนิยาย</h2><p>แก้ไขข้อมูลโปรเจกต์ของคุณ</p></div><button className="modal-close" onClick={onClose} aria-label="ปิด"><X size={19} /></button></div><form className="novel-form" onSubmit={save}>
@@ -278,6 +351,39 @@ function NovelDetailModal({ novel, onClose, onDelete, onUpdate }: { novel: Novel
     <label>แนวนิยาย<select value={genre} onChange={(e) => setGenre(e.target.value as Genre)}>{genres.map((item) => <option key={item}>{item}</option>)}</select></label>
     <label>เรื่องย่อ<textarea rows={4} value={premise} onChange={(e) => setPremise(e.target.value)} /></label>
     <div className="form-two-columns"><label>บทเป้าหมาย<input type="number" min={1} max={100} value={target} onChange={(e) => setTarget(Number(e.target.value))} /></label><label>บทที่เขียนแล้ว<input type="number" min={0} max={100} value={chapters} onChange={(e) => setChapters(Number(e.target.value))} /></label></div>
+    <section className="chapter-library" aria-label="บทนิยาย">
+      <div className="chapter-library-heading">
+        <div><div className="section-eyebrow">YOUR STORY, CHAPTER BY CHAPTER</div><h3>บทนิยาย <span>{novelChapters.length}/{novel.chaptersTarget}</span></h3></div>
+        <button type="button" className="primary-button chapter-generate-button" disabled={isBusy || novelChapters.length >= novel.chaptersTarget} onClick={() => void onGenerateChapter(novel)}>
+          {isGenerating ? <LoaderCircle className="spin" size={16} /> : <WandSparkles size={16} />}
+          {isGenerating ? 'กำลังเขียน...' : isBusy ? 'AI กำลังเขียนเรื่องอื่น' : novelChapters.length ? 'เขียนบทถัดไป' : 'เขียนบทแรก'}
+        </button>
+      </div>
+      {activeChapter ? (
+        <article className="chapter-reader">
+          <button type="button" className="chapter-back-button" onClick={() => setReadingChapter(null)}><ChevronLeft size={15} /> กลับไปยังรายการบท</button>
+          <div className="reader-page">
+            <div className="reader-eyebrow">บทที่ {activeChapter.number}</div>
+            <h4>{activeChapter.title}</h4>
+            <div className="reader-text">{activeChapter.content}</div>
+          </div>
+          <div className="reader-pagination">
+            <button type="button" disabled={!novelChapters.some((chapter) => chapter.number === activeChapter.number - 1)} onClick={() => setReadingChapter(activeChapter.number - 1)}><ChevronLeft size={15} /> บทก่อนหน้า</button>
+            <button type="button" disabled={!novelChapters.some((chapter) => chapter.number === activeChapter.number + 1)} onClick={() => setReadingChapter(activeChapter.number + 1)}>บทถัดไป <ChevronRight size={15} /></button>
+          </div>
+        </article>
+      ) : novelChapters.length ? (
+        <div className="chapter-list">{novelChapters.map((chapter) => (
+          <button type="button" className="chapter-list-item" key={chapter.number} onClick={() => setReadingChapter(chapter.number)}>
+            <span className="chapter-list-number">{String(chapter.number).padStart(2, '0')}</span>
+            <span className="chapter-list-title"><strong>บทที่ {chapter.number}: {chapter.title}</strong><small>{new Date(chapter.createdAt).toLocaleDateString('th-TH')}</small></span>
+            <BookMarked size={16} />
+          </button>
+        ))}</div>
+      ) : (
+        <div className="chapter-empty"><BookOpen size={22} /><span>ยังไม่มีบทนิยาย กด “เขียนบทแรก” เพื่อให้ AI เริ่มเขียนได้เลย</span></div>
+      )}
+    </section>
     <div className="form-note"><BookOpen size={16} /><span>ข้อมูลนี้เก็บใน localStorage ของเบราว์เซอร์ที่ใช้งานอยู่</span></div>
     <div className="modal-actions spread"><button type="button" className="danger-button" onClick={onDelete}><Trash2 size={16} /> ลบโปรเจกต์</button><div><button type="button" className="secondary-button" onClick={onClose}>ยกเลิก</button><button type="submit" className="primary-button"><CheckCircle2 size={16} /> บันทึก</button></div></div>
   </form></Modal>

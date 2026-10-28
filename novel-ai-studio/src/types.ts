@@ -14,9 +14,17 @@ export interface Novel {
   premise: string
   chaptersTarget: number
   chaptersWritten: number
+  chapters?: NovelChapter[]
   updatedAt: string
   status: 'กำลังเขียน' | 'วางพล็อต' | 'พักไว้'
   accent: 'pink' | 'purple' | 'peach' | 'blue'
+}
+
+export interface NovelChapter {
+  number: number
+  title: string
+  content: string
+  createdAt: string
 }
 
 export interface NewNovelInput {
