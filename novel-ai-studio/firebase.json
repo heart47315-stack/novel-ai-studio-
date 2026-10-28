@@ -1,0 +1,8 @@
+{
+  "hosting": {
+    "site": "novel-ai-studio-web-a35d6",
+    "public": "dist",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "rewrites": [{ "source": "**", "destination": "/index.html" }]
+  }
+}
